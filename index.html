@@ -237,7 +237,7 @@ function takeoutOf(s) {
 }
 
 const shops = window.SHOPS.map((s, i) => ({ ...s, i, cat: catOf(s.genre) }));
-const state = { cats: new Set(), genre: '', area: '', q: '', ouenOnly: true, takeout: false, active: null };
+const state = { cats: new Set(), genre: '', area: 'b:神楽坂ブロック', q: '', ouenOnly: true, takeout: false, active: null };
 
 // --- controls
 const $ = id => document.getElementById(id);
@@ -270,8 +270,12 @@ function fillGenres() {
 }
 const blocks = {};
 shops.forEach(s => s.shoukai.forEach(k => { (blocks[s.block] ||= new Set()).add(k); }));
-$('area').innerHTML = `<option value="">エリア：すべて</option>` + Object.entries(blocks).map(([b, set]) =>
-  `<optgroup label="${b}"><option value="b:${b}">${b}全体</option>${[...set].map(k => `<option value="s:${k}">${k}</option>`).join('')}</optgroup>`).join('');
+// よく使う神楽坂ブロックを一番上に置き、最初から選んでおく
+const areaGroup = ([b, set]) =>
+  `<optgroup label="${b}"><option value="b:${b}">${b}全体</option>${[...set].map(k => `<option value="s:${k}">${k}</option>`).join('')}</optgroup>`;
+const blockList = Object.entries(blocks).sort(([a], [b]) => (b === '神楽坂ブロック') - (a === '神楽坂ブロック'));
+$('area').innerHTML = areaGroup(blockList[0]) + `<option value="">エリア：すべて</option>` + blockList.slice(1).map(areaGroup).join('');
+$('area').value = state.area;
 fillGenres();
 $('genre').onchange = e => { state.genre = e.target.value; render(); };
 $('area').onchange = e => {
@@ -414,6 +418,7 @@ function highlight(i, fromList) {
   if (fromList) { needFit = false; map.setView(markers[i].getLatLng(), Math.max(map.getZoom(), 18)); markers[i].openPopup(); }
 }
 render();
+fitArea();
 </script>
 </body>
 </html>
