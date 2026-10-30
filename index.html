@@ -68,7 +68,7 @@ h1 .ticket {
   border-radius: 8px; padding: 8px 10px; min-width: 0;
 }
 #q { flex: 1 1 220px; }
-#genre, #area { flex: 0 1 200px; }
+#genre, #area, #ticket { flex: 0 1 200px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
   font: inherit; font-weight: 500; cursor: pointer; border: 1px solid var(--line); background: var(--surface);
@@ -138,7 +138,7 @@ main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; 
 
 @media (max-width: 760px) {
   h1 { font-size: 1.15rem; }
-  #genre, #area { flex: 1 1 140px; }
+  #genre, #area, #ticket { flex: 1 1 140px; }
   .tabs { display: flex; border-bottom: 1px solid var(--line); background: var(--surface); }
   .tabs button {
     flex: 1; font: inherit; font-weight: 700; padding: 10px; border: 0; background: transparent; color: var(--muted);
@@ -169,7 +169,7 @@ main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; 
 <body data-view="list">
 <header>
   <div class="title-row">
-    <h1><span class="ticket">応援券</span>新宿 商店街ハッピー商品券 お店さがし</h1>
+    <h1><span class="ticket" id="ticketBadge">応援券</span>新宿 商店街ハッピー商品券 お店さがし</h1>
     <span class="period">利用期間 2026年10月1日〜2027年1月8日</span>
     <button id="filterToggle" class="filter-toggle" aria-expanded="false"><b id="filterCnt">0</b>件・条件 <span id="filterArrow">▾</span></button>
   </div>
@@ -177,7 +177,10 @@ main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; 
     <input id="q" type="search" placeholder="店名・住所・商店会で検索" aria-label="キーワード検索">
     <select id="genre" aria-label="業種"></select>
     <select id="area" aria-label="エリア"></select>
-    <label class="toggle"><input id="ouenOnly" type="checkbox" checked> 応援券が使える店だけ</label>
+    <select id="ticket" aria-label="使う商品券">
+      <option value="ouen">応援券が使える店</option>
+      <option value="kyotsu">共通券が使える店（全店）</option>
+    </select>
     <label class="toggle"><input id="takeoutOnly" type="checkbox"> 持ち帰りできる店だけ</label>
   </div>
   <div class="chips" id="chips" role="group" aria-label="ジャンル"></div>
@@ -292,7 +295,11 @@ function fitArea() {
   needFit = false;
   map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
 }
-$('ouenOnly').onchange = e => { state.ouenOnly = e.target.checked; render(); };
+$('ticket').onchange = e => {
+  state.ouenOnly = e.target.value === 'ouen';
+  $('ticketBadge').textContent = state.ouenOnly ? '応援券' : '共通券';
+  render();
+};
 $('takeoutOnly').onchange = e => { state.takeout = e.target.checked; $('takeoutNote').hidden = !state.takeout; render(); };
 $('q').oninput = e => { state.q = e.target.value.trim().toLowerCase(); render(); };
 
