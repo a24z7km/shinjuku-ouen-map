@@ -42,6 +42,7 @@
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
+body { height: 100dvh; }
 body {
   background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px;
   display: flex; flex-direction: column;
@@ -81,6 +82,7 @@ h1 .ticket {
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .tabs { display: none; }
+.filter-toggle { display: none; }
 main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; min-height: 0; }
 #listPane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
 .count {
@@ -147,16 +149,29 @@ main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; 
   #listPane { border-right: 0; }
   main[data-view="list"] #mapPane { display: none; }
   main[data-view="map"] #listPane { display: none; }
+  /* 地図タブでは絞り込み欄をたたんで地図を広く使う */
+  body[data-view="map"] header { padding-block: 8px; gap: 8px; }
+  body[data-view="map"] .period,
+  body[data-view="map"] header:not(.open) .controls,
+  body[data-view="map"] header:not(.open) .chips { display: none; }
+  body[data-view="map"] .title-row { flex-wrap: nowrap; align-items: center; }
+  body[data-view="map"] h1 { font-size: 1rem; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body[data-view="map"] .filter-toggle {
+    display: inline-flex; align-items: center; gap: 4px; flex: none; font: inherit; font-size: .85rem; font-weight: 700;
+    color: var(--accent); background: var(--accent-soft); border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 12px; cursor: pointer;
+  }
   .shop { padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 }
 #mapPane { position: relative; min-height: 0; }
 </style>
 </head>
-<body>
+<body data-view="list">
 <header>
   <div class="title-row">
     <h1><span class="ticket">応援券</span>新宿 商店街ハッピー商品券 お店さがし</h1>
     <span class="period">利用期間 2026年10月1日〜2027年1月8日</span>
+    <button id="filterToggle" class="filter-toggle" aria-expanded="false"><b id="filterCnt">0</b>件・条件 <span id="filterArrow">▾</span></button>
   </div>
   <div class="controls">
     <input id="q" type="search" placeholder="店名・住所・商店会で検索" aria-label="キーワード検索">
@@ -279,13 +294,18 @@ $('q').oninput = e => { state.q = e.target.value.trim().toLowerCase(); render();
 
 // --- tabs (mobile)
 function setView(v) {
-  $('main').dataset.view = v;
+  $('main').dataset.view = document.body.dataset.view = v;
   $('tabList').setAttribute('aria-selected', v === 'list');
   $('tabMap').setAttribute('aria-selected', v === 'map');
   if (v === 'map') setTimeout(() => { map.invalidateSize(); if (needFit) fitArea(); }, 0);
 }
 $('tabList').onclick = () => setView('list');
 $('tabMap').onclick = () => setView('map');
+$('filterToggle').onclick = () => {
+  const open = document.querySelector('header').classList.toggle('open');
+  $('filterToggle').setAttribute('aria-expanded', open);
+  $('filterArrow').textContent = open ? '▴' : '▾';
+};
 
 // --- map
 const map = L.map('map', { zoomControl: true }).setView([35.698, 139.71], 14);
@@ -293,6 +313,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
 }).addTo(map);
 const cluster = L.layerGroup().addTo(map);
+// 絞り込み欄の開閉などで地図の大きさが変わったら描き直す
+new ResizeObserver(() => map.invalidateSize()).observe($('map'));
 // 同じ番地のお店はピンが重なるので、円状に少しずらして全部押せるようにする
 const sameSpot = {};
 shops.forEach(s => { if (s.lat) (sameSpot[s.lat + ',' + s.lng] ||= []).push(s); });
@@ -331,7 +353,7 @@ function match(s) {
 }
 function render() {
   const hits = shops.filter(match);
-  $('cnt').textContent = hits.length;
+  $('cnt').textContent = $('filterCnt').textContent = hits.length;
   const noPos = hits.filter(s => !s.lat).length;
   $('cntNote').textContent = noPos ? `うち ${noPos} 件は地図に表示できません` : '';
   const list = $('list');
