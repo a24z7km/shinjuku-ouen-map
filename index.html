@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>新宿 応援券マップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@700;900&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: 上部に検索バー、下は左リスト＋右地図の2ペイン。スマホではタブで切替 */
+:root {
+  --bg: #f6f7f4;
+  --surface: #ffffff;
+  --fg: #1f2a27;
+  --muted: #5d6b66;
+  --line: #dde3df;
+  --accent: #0b7a5e;
+  --accent-soft: #e2f2ec;
+  --happy: #f2b51d;
+  --c-food: #e0562f;
+  --c-daily: #2f8f3a;
+  --c-shop: #3b6fd1;
+  --c-service: #9a4fc4;
+  --font-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", sans-serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131917; --surface: #1b2320; --fg: #e8eeeb; --muted: #9aa8a2; --line: #2c3833;
+    --accent: #3cc49b; --accent-soft: #1d3a31; --happy: #f2c04a;
+    --c-food: #ff7a52; --c-daily: #5cc067; --c-shop: #6f9bf0; --c-service: #c083e6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131917; --surface: #1b2320; --fg: #e8eeeb; --muted: #9aa8a2; --line: #2c3833;
+  --accent: #3cc49b; --accent-soft: #1d3a31; --happy: #f2c04a;
+  --c-food: #ff7a52; --c-daily: #5cc067; --c-shop: #6f9bf0; --c-service: #c083e6;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px;
+  display: flex; flex-direction: column;
+}
+header {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--font-display); font-weight: 900; font-size: 1.35rem; margin: 0; letter-spacing: .02em; }
+h1 .ticket {
+  display: inline-block; background: var(--happy); color: #2a2100; font-size: .8rem;
+  padding: 2px 8px; border-radius: 4px; margin-right: 6px; vertical-align: 3px;
+  border: 1px dashed rgba(0,0,0,.35);
+}
+.period { color: var(--muted); font-size: .8rem; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.controls input[type="search"], .controls select {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+#q { flex: 1 1 220px; }
+#genre, #area { flex: 0 1 200px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  font: inherit; font-weight: 500; cursor: pointer; border: 1px solid var(--line); background: var(--surface);
+  color: var(--fg); border-radius: 999px; padding: 5px 12px; display: inline-flex; align-items: center; gap: 6px;
+}
+.chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.chip[aria-pressed="true"] { background: var(--c, var(--accent)); border-color: var(--c, var(--accent)); color: #fff; }
+.chip[aria-pressed="true"] .dot { background: #fff; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tabs { display: none; }
+main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; min-height: 0; }
+#listPane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
+.count {
+  padding: 8px 16px; font-size: .85rem; color: var(--muted); border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.count b { color: var(--fg); font-variant-numeric: tabular-nums; }
+#list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.shop {
+  padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 4px;
+  border-left: 4px solid var(--c);
+}
+.shop { cursor: pointer; }
+.shop:hover { background: color-mix(in srgb, var(--accent-soft) 50%, transparent); }
+.shop.active { background: var(--accent-soft); }
+.shop h3 { margin: 0; font-size: 1rem; font-weight: 700; line-height: 1.4; }
+.meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .78rem; }
+.tag { padding: 1px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+.tag.ouen { background: var(--happy); border-color: var(--happy); color: #2a2100; font-weight: 700; }
+.tag.kyotsu { font-weight: 700; }
+.tag.takeout { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.btn.memo { border-style: dashed; }
+.btn.memo[aria-pressed="true"] { border-style: solid; background: var(--accent-soft); }
+.takeout-note { padding: 8px 16px; font-size: .78rem; color: var(--muted); background: var(--accent-soft); border-bottom: 1px solid var(--line); line-height: 1.6; }
+.addr, .tel, .assoc { font-size: .82rem; color: var(--muted); }
+.tel { font-variant-numeric: tabular-nums; }
+.actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.btn {
+  font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; text-decoration: none;
+  border-radius: 6px; padding: 5px 10px; border: 1px solid var(--accent); color: var(--accent); background: transparent;
+}
+.btn.primary { background: var(--accent); color: var(--surface); }
+.empty { padding: 32px 16px; color: var(--muted); text-align: center; }
+#map { min-height: 0; height: 100%; background: var(--line); }
+
+.pin {
+  width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: var(--c); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+.leaflet-popup-content { font-family: var(--font-body); font-size: 13px; line-height: 1.5; margin: 12px 14px; }
+.leaflet-popup-content h4 { margin: 0 0 4px; font-size: 14px; }
+.leaflet-popup-content .btn { display: inline-block; margin-top: 6px; color: #fff; background: #0b7a5e; border-color: #0b7a5e; }
+.leaflet-popup-content .pop-sep { border-top: 1px solid #ddd; margin: 8px 0; }
+.note { font-size: .72rem; color: var(--muted); padding: 6px 16px; border-top: 1px solid var(--line); }
+
+@media (max-width: 760px) {
+  h1 { font-size: 1.15rem; }
+  #genre, #area { flex: 1 1 140px; }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .tabs button {
+    flex: 1; font: inherit; font-weight: 700; padding: 10px; border: 0; background: transparent; color: var(--muted);
+    border-bottom: 3px solid transparent; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  main { grid-template-columns: 1fr; }
+  #listPane { border-right: 0; }
+  main[data-view="list"] #mapPane { display: none; }
+  main[data-view="map"] #listPane { display: none; }
+  .shop { padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+#mapPane { position: relative; min-height: 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="title-row">
+    <h1><span class="ticket">応援券</span>新宿 商店街ハッピー商品券 お店さがし</h1>
+    <span class="period">利用期間 2026年10月1日〜2027年1月8日</span>
+  </div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="店名・住所・商店会で検索" aria-label="キーワード検索">
+    <select id="genre" aria-label="業種"></select>
+    <select id="area" aria-label="エリア"></select>
+    <label class="toggle"><input id="ouenOnly" type="checkbox" checked> 応援券が使える店だけ</label>
+    <label class="toggle"><input id="takeoutOnly" type="checkbox"> 持ち帰りできる店だけ</label>
+  </div>
+  <div class="chips" id="chips" role="group" aria-label="ジャンル"></div>
+</header>
+<div class="tabs" role="tablist">
+  <button id="tabList" role="tab" aria-selected="true">一覧</button>
+  <button id="tabMap" role="tab" aria-selected="false">地図</button>
+</div>
+<main id="main" data-view="list">
+  <section id="listPane">
+    <div class="count"><span><b id="cnt">0</b> 件</span><span id="cntNote"></span></div>
+    <div class="takeout-note" id="takeoutNote" hidden>
+      食品・パン・スーパー・コンビニ、持ち帰りに対応していることが多いチェーン店、ネットで持ち帰りできると確認できた神楽坂エリアのお店（2026年10月30日に確認）を表示しています。それ以外のお店でも、持ち帰りできたら「持ち帰りOKとメモ」を押すとここに出るようになります（メモはこの端末だけに保存されます）。お店の対応は変わることがあるので、念のため電話で確認してください。
+    </div>
+    <ul id="list"></ul>
+    <div class="note">出典：新宿区商店会連合会「令和8年度 商店街ハッピー商品券 取扱店舗一覧」（追加分 2026/10/30 まで）。ピン位置は住所の番地から推定した目安です。</div>
+  </section>
+  <section id="mapPane"><div id="map"></div></section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="shops.js"></script>
+<script>
+const CATS = [
+  { id: 'food', label: '飲食', color: '--c-food', genres: ['居酒屋・ダイニングバー','和食・大衆食堂','喫茶店・カフェ','中華料理・韓国料理','洋食・レストラン','フレンチ・イタリアン','その他飲食店','寿司','そば・うどん','焼肉・鉄板焼','バー・スナック・パブ','カレー・エスニック料理','ラーメン'] },
+  { id: 'daily', label: '食品・日用品', color: '--c-daily', genres: ['食料品販売','スーパーマーケット','ドラッグストア','コンビニエンスストア','酒屋','米穀店','パン・サンドイッチ販売','日用雑貨販売','生花・植木販売'] },
+  { id: 'shop', label: 'ファッション・専門店', color: '--c-shop', genres: ['その他小売店','婦人服販売','衣料品・寝具販売','紳士服販売','靴・バッグ販売','眼鏡・コンタクトレンズ販売','家電販売','文具店','書店','化粧品販売','時計販売','スポーツ用品店','ゲーム・おもちゃ・娯楽用品販売','カメラ・写真用品販売','百貨店・商業施設'] },
+  { id: 'service', label: '美容・サービス', color: '--c-service', genres: ['理容業・美容業','エステ・リラクゼーション','整体・ボディケア','鍼灸・あん摩マッサージ','クリーニング店','ホテル・旅館','カルチャー教室','銭湯・サウナ','その他サービス業','その他業種'] },
+];
+const catOf = g => (CATS.find(c => c.genres.includes(g)) || CATS[3]);
+const css = getComputedStyle(document.documentElement);
+const colorOf = cat => css.getPropertyValue(cat.color).trim();
+
+// 持ち帰り：PDFに情報がないため、業種で確実なもの＋持ち帰り対応が定番のチェーン店＋自分のメモで判定
+const TAKEOUT_GENRES = ['食料品販売', 'パン・サンドイッチ販売', 'スーパーマーケット', 'コンビニエンスストア'];
+const TAKEOUT_CHAINS = /CoCo壱番屋|ダンダダン|ドトール|ベローチェ|PRONTO|和幸|銀座アスター|鶏笑|おにぎり屋|Hotdog stand|ＢＡＮＡＮＡ|Juicebar/;
+// 神楽坂ブロック：食べログの「テイクアウト可」一覧（2026年10月30日時点）などで確認できた店
+const TAKEOUT_CHECKED = new Set([
+  'Homeys Hotdog stand', 'TacoFeliz (タコフェリス)', 'インド・タイ料理レストラン サイノ 神楽坂店',
+  'ターボラカルダ Tavola Calda Carmine', 'ボルカン', 'リストランテ カルミネ', 'Ｔａｎａｋａ＇ｓ Ｒｏｔｉ',
+  '神楽坂ワインハウス バイザグラス', 'コパン', '今彩', '中国料理 宝龍', 'まるフェ', 'ル・パヴェ神楽坂店',
+  'AGARIS神楽坂', 'ＯＳＴＥＲＩＡ ＰＯＲＣＯ ＶＩＮＯ', '神楽坂 龍公亭', 'ご馳走や叶え', '志満金',
+  '鮨 酒 肴 杉玉 神楽坂', 'ふらの和牛 よしうし神楽坂通り', 'Spicier', 'Buona Carne', 'Craft Tea Bar 丹',
+  'うなぎや 神楽', 'クワトロチェント', 'モナコ洋菓子店', 'Donish神楽坂通り',
+]);
+const MEMO_KEY = 'takeoutMemo';
+let memo = new Set();
+try { memo = new Set(JSON.parse(localStorage.getItem(MEMO_KEY) || '[]')); } catch (e) {}
+const memoId = s => s.name + '|' + s.addr;
+function saveMemo() { try { localStorage.setItem(MEMO_KEY, JSON.stringify([...memo])); } catch (e) {} }
+function takeoutOf(s) {
+  if (TAKEOUT_GENRES.includes(s.genre)) return '持ち帰り';
+  if (TAKEOUT_CHECKED.has(s.name)) return '持ち帰りOK（ネットで確認）';
+  if (TAKEOUT_CHAINS.test(s.name)) return '持ち帰り対応が多い店';
+  if (memo.has(memoId(s))) return '持ち帰りOK（メモ）';
+  return null;
+}
+
+const shops = window.SHOPS.map((s, i) => ({ ...s, i, cat: catOf(s.genre) }));
+const state = { cat: null, genre: '', area: '', q: '', ouenOnly: true, takeout: false, active: null };
+
+// --- controls
+const $ = id => document.getElementById(id);
+const chips = $('chips');
+[{ id: null, label: 'すべて', color: '--accent' }, ...CATS].forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.type = 'button';
+  b.style.setProperty('--c', `var(${c.color})`);
+  b.innerHTML = `<span class="dot"></span>${c.label}`;
+  b.setAttribute('aria-pressed', c.id === state.cat);
+  b.onclick = () => { state.cat = c.id; state.genre = ''; syncChips(); fillGenres(); render(); };
+  b.dataset.id = c.id ?? '';
+  chips.appendChild(b);
+});
+function syncChips() { for (const b of chips.children) b.setAttribute('aria-pressed', (b.dataset.id || null) === state.cat); }
+function fillGenres() {
+  const counts = {};
+  shops.forEach(s => { if (!state.cat || s.cat.id === state.cat) counts[s.genre] = (counts[s.genre] || 0) + 1; });
+  const gs = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  $('genre').innerHTML = `<option value="">業種：すべて</option>` + gs.map(g => `<option>${g}</option>`).join('');
+  $('genre').value = state.genre;
+}
+const blocks = {};
+shops.forEach(s => s.shoukai.forEach(k => { (blocks[s.block] ||= new Set()).add(k); }));
+$('area').innerHTML = `<option value="">エリア：すべて</option>` + Object.entries(blocks).map(([b, set]) =>
+  `<optgroup label="${b}"><option value="b:${b}">${b}全体</option>${[...set].map(k => `<option value="s:${k}">${k}</option>`).join('')}</optgroup>`).join('');
+fillGenres();
+$('genre').onchange = e => { state.genre = e.target.value; render(); };
+$('area').onchange = e => { state.area = e.target.value; render(); };
+$('ouenOnly').onchange = e => { state.ouenOnly = e.target.checked; render(); };
+$('takeoutOnly').onchange = e => { state.takeout = e.target.checked; $('takeoutNote').hidden = !state.takeout; render(); };
+$('q').oninput = e => { state.q = e.target.value.trim().toLowerCase(); render(); };
+
+// --- tabs (mobile)
+function setView(v) {
+  $('main').dataset.view = v;
+  $('tabList').setAttribute('aria-selected', v === 'list');
+  $('tabMap').setAttribute('aria-selected', v === 'map');
+  if (v === 'map') setTimeout(() => map.invalidateSize(), 0);
+}
+$('tabList').onclick = () => setView('list');
+$('tabMap').onclick = () => setView('map');
+
+// --- map
+const map = L.map('map', { zoomControl: true }).setView([35.698, 139.71], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+}).addTo(map);
+const cluster = L.layerGroup().addTo(map);
+// 同じ番地のお店はピンが重なるので、円状に少しずらして全部押せるようにする
+const sameSpot = {};
+shops.forEach(s => { if (s.lat) (sameSpot[s.lat + ',' + s.lng] ||= []).push(s); });
+Object.values(sameSpot).forEach(group => {
+  if (group.length < 2) return;
+  const r = 0.00007 * Math.min(1 + group.length / 6, 3);
+  group.forEach((s, k) => {
+    const a = (2 * Math.PI * k) / group.length;
+    s.lat += r * Math.sin(a);
+    s.lng += r * Math.cos(a) * 1.23;
+  });
+});
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const gmap = s => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(s.name + ' ' + s.addr);
+const markers = shops.map(s => {
+  if (!s.lat) return null;
+  const icon = L.divIcon({ className: '', html: `<div class="pin" style="--c:${colorOf(s.cat)}"></div>`, iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -20] });
+  const m = L.marker([s.lat, s.lng], { icon, title: s.name });
+  m.bindPopup(() => `<h4>${esc(s.name)}</h4>${esc(s.genre)}　${s.ouen ? '<b>応援券OK</b>' : '共通券のみ'}<br>${esc(s.addr)}<br>${esc(s.tel)}<br><a class="btn" href="${gmap(s)}" target="_blank" rel="noopener">Google マップで開く</a>`);
+  m.on('click', () => highlight(s.i, false));
+  return m;
+});
+
+// --- filter + render
+function match(s) {
+  if (state.ouenOnly && !s.ouen) return false;
+  if (state.takeout && !takeoutOf(s)) return false;
+  if (state.cat && s.cat.id !== state.cat) return false;
+  if (state.genre && s.genre !== state.genre) return false;
+  if (state.area) {
+    const [t, v] = [state.area.slice(0, 1), state.area.slice(2)];
+    if (t === 'b' ? s.block !== v : !s.shoukai.includes(v)) return false;
+  }
+  if (state.q && !(s.name + s.addr + s.genre + s.shoukai.join('')).toLowerCase().includes(state.q)) return false;
+  return true;
+}
+function render() {
+  const hits = shops.filter(match);
+  $('cnt').textContent = hits.length;
+  const noPos = hits.filter(s => !s.lat).length;
+  $('cntNote').textContent = noPos ? `うち ${noPos} 件は地図に表示できません` : '';
+  const list = $('list');
+  list.innerHTML = hits.length ? hits.map(s => {
+    const to = takeoutOf(s);
+    const canMemo = s.cat.id === 'food' && !TAKEOUT_CHAINS.test(s.name) && !TAKEOUT_CHECKED.has(s.name);
+    return `
+    <li class="shop" id="shop-${s.i}" style="--c:${colorOf(s.cat)}">
+      <h3>${esc(s.name)}</h3>
+      <div class="meta">
+        ${s.ouen ? '<span class="tag ouen">応援</span>' : ''}<span class="tag kyotsu">共通</span>
+        <span class="tag">${esc(s.genre)}</span>
+        ${to ? `<span class="tag takeout">${to}</span>` : ''}
+      </div>
+      <div class="addr">${esc(s.addr)}</div>
+      <div class="tel">${esc(s.tel)}</div>
+      <div class="assoc">${esc(s.shoukai.join('／'))}</div>
+      <div class="actions">
+        ${s.lat ? `<button class="btn" type="button" data-i="${s.i}">地図で見る</button>` : ''}
+        <a class="btn primary" href="${gmap(s)}" target="_blank" rel="noopener">Google マップ</a>
+        ${canMemo ? `<button class="btn memo" type="button" data-memo="${s.i}" aria-pressed="${memo.has(memoId(s))}">${memo.has(memoId(s)) ? '持ち帰りOKのメモを外す' : '持ち帰りOKとメモ'}</button>` : ''}
+      </div>
+    </li>`; }).join('') : '<li class="empty">条件に合うお店がありません。絞り込みをゆるめてください。</li>';
+  cluster.clearLayers();
+  hits.forEach(s => markers[s.i]?.addTo(cluster));
+}
+$('list').addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]');
+  if (b) { setView('map'); highlight(+b.dataset.i, true); return; }
+  // カードのどこを押しても地図のポップアップを開く（ボタン・リンクは除く）
+  const card = e.target.closest('.shop');
+  if (card && !e.target.closest('a, button') && markers[+card.id.slice(5)]) {
+    highlight(+card.id.slice(5), true);
+    return;
+  }
+  const m = e.target.closest('button[data-memo]');
+  if (m) {
+    const s = shops[+m.dataset.memo], id = memoId(s);
+    memo.has(id) ? memo.delete(id) : memo.add(id);
+    saveMemo();
+    const top = $('list').scrollTop;
+    render();
+    $('list').scrollTop = top;
+  }
+});
+function highlight(i, fromList) {
+  document.querySelector('.shop.active')?.classList.remove('active');
+  const li = document.getElementById('shop-' + i);
+  if (li) { li.classList.add('active'); if (!fromList) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  if (fromList) { map.setView(markers[i].getLatLng(), Math.max(map.getZoom(), 18)); markers[i].openPopup(); }
+}
+render();
+</script>
+</body>
+</html>
