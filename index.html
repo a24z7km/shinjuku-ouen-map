@@ -120,6 +120,14 @@ main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) 1fr; 
   width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
   background: var(--c); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35);
 }
+.leaflet-tooltip.pin-label {
+  font-family: var(--font-body); font-size: 11px; line-height: 1.3; padding: 2px 6px;
+  background: rgba(255,255,255,.92); color: #1f2a27; border: 1px solid #c9d2cd; border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2); white-space: nowrap;
+}
+.leaflet-tooltip.pin-label::before { display: none; }
+.pin-label b { display: block; font-weight: 700; }
+.pin-label span { color: #5d6b66; font-size: 10px; }
 .leaflet-popup-content { font-family: var(--font-body); font-size: 13px; line-height: 1.5; margin: 12px 14px; }
 .leaflet-popup-content h4 { margin: 0 0 4px; font-size: 14px; }
 .leaflet-popup-content .btn { display: inline-block; margin-top: 6px; color: #fff; background: #0b7a5e; border-color: #0b7a5e; }
@@ -243,7 +251,20 @@ $('area').innerHTML = `<option value="">エリア：すべて</option>` + Object
   `<optgroup label="${b}"><option value="b:${b}">${b}全体</option>${[...set].map(k => `<option value="s:${k}">${k}</option>`).join('')}</optgroup>`).join('');
 fillGenres();
 $('genre').onchange = e => { state.genre = e.target.value; render(); };
-$('area').onchange = e => { state.area = e.target.value; render(); };
+$('area').onchange = e => {
+  state.area = e.target.value;
+  render();
+  fitArea();
+};
+// 選んだエリアのお店が全部入るように地図を合わせる（スマホで地図が隠れているときは、地図タブを開いたときに合わせる）
+let needFit = false;
+function fitArea() {
+  const pts = shops.filter(match).filter(s => s.lat).map(s => [s.lat, s.lng]);
+  if (!state.area || !pts.length) return;
+  if (!map.getSize().x) { needFit = true; return; }
+  needFit = false;
+  map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
+}
 $('ouenOnly').onchange = e => { state.ouenOnly = e.target.checked; render(); };
 $('takeoutOnly').onchange = e => { state.takeout = e.target.checked; $('takeoutNote').hidden = !state.takeout; render(); };
 $('q').oninput = e => { state.q = e.target.value.trim().toLowerCase(); render(); };
@@ -253,7 +274,7 @@ function setView(v) {
   $('main').dataset.view = v;
   $('tabList').setAttribute('aria-selected', v === 'list');
   $('tabMap').setAttribute('aria-selected', v === 'map');
-  if (v === 'map') setTimeout(() => map.invalidateSize(), 0);
+  if (v === 'map') setTimeout(() => { map.invalidateSize(); if (needFit) fitArea(); }, 0);
 }
 $('tabList').onclick = () => setView('list');
 $('tabMap').onclick = () => setView('map');
@@ -327,7 +348,15 @@ function render() {
       </div>
     </li>`; }).join('') : '<li class="empty">条件に合うお店がありません。絞り込みをゆるめてください。</li>';
   cluster.clearLayers();
-  hits.forEach(s => markers[s.i]?.addTo(cluster));
+  // エリアを絞ったときは、ピンを押さなくても店名と業種が見えるようにラベルを常に出す
+  hits.forEach(s => {
+    const m = markers[s.i];
+    if (!m) return;
+    m.unbindTooltip();
+    if (state.area) m.bindTooltip(`<b>${esc(s.name)}</b><span>${esc(s.genre)}</span>`,
+      { permanent: true, direction: 'right', offset: [8, -12], className: 'pin-label' });
+    m.addTo(cluster);
+  });
 }
 $('list').addEventListener('click', e => {
   const b = e.target.closest('button[data-i]');
@@ -352,7 +381,7 @@ function highlight(i, fromList) {
   document.querySelector('.shop.active')?.classList.remove('active');
   const li = document.getElementById('shop-' + i);
   if (li) { li.classList.add('active'); if (!fromList) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-  if (fromList) { map.setView(markers[i].getLatLng(), Math.max(map.getZoom(), 18)); markers[i].openPopup(); }
+  if (fromList) { needFit = false; map.setView(markers[i].getLatLng(), Math.max(map.getZoom(), 18)); markers[i].openPopup(); }
 }
 render();
 </script>
