@@ -389,16 +389,29 @@ function render() {
       </div>
     </li>`; }).join('') : '<li class="empty">条件に合うお店がありません。絞り込みをゆるめてください。</li>';
   cluster.clearLayers();
-  // エリアを絞ったときは、ピンを押さなくても店名と業種が見えるようにラベルを常に出す
-  hits.forEach(s => {
-    const m = markers[s.i];
-    if (!m) return;
-    m.unbindTooltip();
-    if (state.area) m.bindTooltip(`<b>${esc(s.name)}</b><span>${esc(s.genre)}</span>`,
+  shownHits = hits;
+  hits.forEach(s => markers[s.i]?.addTo(cluster));
+  updateLabels();
+}
+// ピンを押さなくても店名と業種が見えるようにラベルを出す。
+// エリアを絞ったときは常に、それ以外は街区が見えるくらい拡大したときに、画面内のお店だけ出す
+const LABEL_ZOOM = 16;
+let shownHits = [];
+const labeled = new Set();
+function updateLabels() {
+  const show = state.area || map.getZoom() >= LABEL_ZOOM;
+  const bounds = map.getBounds().pad(0.2);
+  const want = new Set(show ? shownHits.filter(s => markers[s.i] && (state.area || bounds.contains(markers[s.i].getLatLng()))).map(s => s.i) : []);
+  labeled.forEach(i => { if (!want.has(i)) { markers[i].unbindTooltip(); labeled.delete(i); } });
+  want.forEach(i => {
+    if (labeled.has(i)) return;
+    const s = shops[i];
+    markers[i].bindTooltip(`<b>${esc(s.name)}</b><span>${esc(s.genre)}</span>`,
       { permanent: true, direction: 'right', offset: [8, -12], className: 'pin-label' });
-    m.addTo(cluster);
+    labeled.add(i);
   });
 }
+map.on('zoomend moveend resize', updateLabels);
 $('list').addEventListener('click', e => {
   const b = e.target.closest('button[data-i]');
   if (b) { setView('map'); highlight(+b.dataset.i, true); return; }
