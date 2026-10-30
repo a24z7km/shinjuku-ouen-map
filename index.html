@@ -222,7 +222,7 @@ function takeoutOf(s) {
 }
 
 const shops = window.SHOPS.map((s, i) => ({ ...s, i, cat: catOf(s.genre) }));
-const state = { cat: null, genre: '', area: '', q: '', ouenOnly: true, takeout: false, active: null };
+const state = { cats: new Set(), genre: '', area: '', q: '', ouenOnly: true, takeout: false, active: null };
 
 // --- controls
 const $ = id => document.getElementById(id);
@@ -232,15 +232,23 @@ const chips = $('chips');
   b.className = 'chip'; b.type = 'button';
   b.style.setProperty('--c', `var(${c.color})`);
   b.innerHTML = `<span class="dot"></span>${c.label}`;
-  b.setAttribute('aria-pressed', c.id === state.cat);
-  b.onclick = () => { state.cat = c.id; state.genre = ''; syncChips(); fillGenres(); render(); };
+  // 「すべて」は選択をクリア、それ以外は押すたびにオン・オフ（複数選択可）
+  b.onclick = () => {
+    if (!c.id) state.cats.clear();
+    else state.cats.has(c.id) ? state.cats.delete(c.id) : state.cats.add(c.id);
+    state.genre = ''; syncChips(); fillGenres(); render();
+  };
   b.dataset.id = c.id ?? '';
   chips.appendChild(b);
 });
-function syncChips() { for (const b of chips.children) b.setAttribute('aria-pressed', (b.dataset.id || null) === state.cat); }
+function syncChips() {
+  for (const b of chips.children)
+    b.setAttribute('aria-pressed', b.dataset.id ? state.cats.has(b.dataset.id) : state.cats.size === 0);
+}
+syncChips();
 function fillGenres() {
   const counts = {};
-  shops.forEach(s => { if (!state.cat || s.cat.id === state.cat) counts[s.genre] = (counts[s.genre] || 0) + 1; });
+  shops.forEach(s => { if (!state.cats.size || state.cats.has(s.cat.id)) counts[s.genre] = (counts[s.genre] || 0) + 1; });
   const gs = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
   $('genre').innerHTML = `<option value="">業種：すべて</option>` + gs.map(g => `<option>${g}</option>`).join('');
   $('genre').value = state.genre;
@@ -312,7 +320,7 @@ const markers = shops.map(s => {
 function match(s) {
   if (state.ouenOnly && !s.ouen) return false;
   if (state.takeout && !takeoutOf(s)) return false;
-  if (state.cat && s.cat.id !== state.cat) return false;
+  if (state.cats.size && !state.cats.has(s.cat.id)) return false;
   if (state.genre && s.genre !== state.genre) return false;
   if (state.area) {
     const [t, v] = [state.area.slice(0, 1), state.area.slice(2)];
